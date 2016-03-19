@@ -1,0 +1,304 @@
+---
+title: "Accelerometers Prediction"
+author: "Kenia Sousa"
+date: "9 Mar 2016"
+output: html_document
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.width=8, fig.height=6, fig.path='Figure/',
+                      echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+The data used is from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. The goal of this project is to predict the manner in which they did the exercise. 
+
+More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Load the Data
+
+The data are in the GitHub project and available in the links listed as follows:
+
+The training data: 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The first step is to load the data:
+
+```{r, echo=TRUE}
+require(caret)
+training <- read.csv("pml-training.csv", sep = ",", na.strings="NA") 
+testingAcc <- read.csv("pml-testing.csv", sep = ",", na.strings="NA") 
+```
+
+#Explore the data
+
+There are 19,622 observations and 160 variables in the training set.
+
+There are 20 observations and 160 variables in the testing set.
+
+```{r, echo=TRUE}
+dim(training)
+dim(testingAcc)
+```
+
+We know that the variable "classe" represents the manner in which the participants did the exercise, which will be the outcome. 
+
+Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: 
+
+- exactly according to the specification (Class A), 
+- throwing the elbows to the front (Class B), 
+- lifting the dumbbell only halfway (Class C), 
+- lowering the dumbbell only halfway (Class D) and 
+- throwing the hips to the front (Class E).
+
+Read more at: http://groupware.les.inf.puc-rio.br/har#ixzz42rOddXrC
+
+So, we explore this variable "classe" and look at the distribution of values per classe in the training set.
+
+```{r, echo=TRUE}
+levels(training$classe)
+table(training$classe)
+```
+
+Looking at the structure of the data, it is strange to see that there are factor variables with several levels, some with 400 levels. From several tests done, there was even an error saying that Random Forest can not handle categorical predictors with more than 53 categories. And looking at the test set, the same variables are numeric.
+
+```{r, echo=TRUE}
+str(training)
+str(testingAcc)
+```
+
+We can also notice that there are a lot of missing values.
+
+At first, I had left the missing values and trained the models, but different errors and warnings appeared.
+
+I used two pre-processing methods:
+a)The method = "nzv" identifies numeric predictor columns by applying nearZeroVar with the default parameters to exclude "near zero-variance" predictors. 
+The method "nzv" was added because there were warnings indicating several variables have no variation.
+b)The method="knnImpute" does imputation using k-nearest neighbors. For each record, identify missing features. For each missing feature find the k nearest neighbors which have that feature. Impute the missing value using the imputation function on the k-length vector of values found from the neighbors.
+I also used the argument na.action = na.exclude, which determines that the missing values will appear with value NA.
+Since I did the training keeping the missing values, I also maintained them in the predictions by using na.action=NULL.
+http://stackoverflow.com/questions/34324930/predicting-new-data-with-nas-with-gbm-in-r
+
+Despite these methods, the predictions in the validation set were still wrong, with accuracy metric missing, for instance.
+So, after studying and several tests with different arguments in train() for the training set and predict() in the validation set, I looked closely to the data and decided to process them.
+
+Knowing that training and test must be processed in the same way, I first removed the missing values from both data sets:
+
+If the count of NAs in a column is equal to zero, meaning, without NAs, then I keep it in the data set.
+
+After removing the variables with missing values and keeping only the variables related to the data from accelerometers on the belt, forearm, arm, and dumbell, the factor variables with many levels are removed. Good news!
+
+Pre-processing on the testing data set:
+
+```{r, echo=TRUE}
+testingAcc.clean <-testingAcc[,8:160]
+testingAcc.clean <- testingAcc.clean[,colSums(is.na(testingAcc.clean))==0]
+dim(testingAcc.clean)
+str(testingAcc.clean)
+```
+
+Pre-processing on the training data set:
+
+```{r, echo=TRUE}
+training.clean <-training[,8:160]
+training.clean <- training.clean[,colSums(is.na(testingAcc[,8:160]))==0]
+dim(training.clean)
+str(training.clean)
+table(training.clean$classe)
+```
+
+Now, organize the data sets in training, validation and testing sets:
+
+There are 13,737 observations and 53 variables in the training set.
+
+There are 5,885 observations and 53 variables in the validation set.
+
+There are 20 observations and 53 variables in the testing set.
+
+```{r, echo=TRUE}
+inBuild <- createDataPartition(y=training.clean$classe, p=0.7,list=FALSE)
+validationAcc <- training.clean[-inBuild,]
+dim(validationAcc)
+trainingAcc <- training.clean[inBuild,]
+dim(trainingAcc)
+summary(trainingAcc)
+testingAccFinal <- testingAcc.clean
+dim(testingAccFinal)
+```
+
+Here, the featurePlot depicts the association between some features that represent the total of measures from the accelerometers. We can see two separate groups in terms of the outcome for the feature "total_accel_belt".
+
+```{r, echo=TRUE}
+featurePlot(x = trainingAcc[,c("total_accel_arm","total_accel_belt","total_accel_forearm","total_accel_dumbbell")], y = trainingAcc$classe, plot="pairs")
+```
+
+##How built the model
+
+Four different models were used to compare the predictions: predicting with trees, Random Forest, Bagging, Boosting, and combining predictors, the main models presented in the Machine Learning course (week 3).
+
+Set the seed for each model for reproducibility.
+
+Then, predict the manner in which the participants did the exercise with each model using the "classe" variable in the validation set. 
+
+###Predicting with trees 
+
+Predicting with trees iteratively splits the variables into groups. 
+
+####Create the model
+
+```{r, echo=TRUE}
+require(rpart)
+#install.packages('e1071', dependencies=TRUE)
+set.seed(333)
+mod.rpart <- train(classe ~ .,data=trainingAcc, method="rpart")
+mod.rpart
+mod.rpart$finalModel
+require(rattle)
+require(rpart.plot)
+fancyRpartPlot(mod.rpart$finalModel)
+```
+
+####Predict the model
+
+Predicting with trees in the validation set. 
+The accuracy of the model is:  0.492
+
+```{r, echo=TRUE}
+pred.rpart <- predict(mod.rpart,validationAcc)
+table(pred.rpart,validationAcc$classe)
+confusionMatrix(pred.rpart,validationAcc$classe)
+```
+
+###Random Forest
+Random Forest is run using cross validation with 3 folds. 
+
+The training set is divided in 3 folds to create cross validation. Three different combinations of these 3 folds are tried, where 2 folds are used as training set and 1 fold is used as a testing set. Then, the errors are averaged to pick a prediction model with the lowest error rate. This is a way to verify how accurate the model is before using the test data.
+
+####Create the model
+
+```{r, echo=TRUE}
+require(randomForest)
+set.seed(333)
+mod.rf3 <- train(classe ~.,method = "rf", data=trainingAcc, trControl=trainControl(method="cv",number=3))
+mod.rf3$finalModel
+mod.rf3
+```
+
+####Predict the model
+
+Predicting with random forest in the validation set. 
+The accuracy of the model is: 0.994
+
+```{r, echo=TRUE}
+pred.rf3 <- predict(mod.rf3,validationAcc)
+table(pred.rf3,validationAcc$classe)
+confusionMatrix(pred.rf3,validationAcc$classe)
+```
+
+###Boosting
+
+Boosting with trees is run using cross validation with 3 folds. 
+
+####Create the model
+
+```{r, echo=TRUE}
+set.seed(333)
+mod.gbm <- train(classe ~.,method = "gbm", data=trainingAcc, verbose=FALSE, trControl=trainControl(method="cv",number=3))
+mod.gbm$finalModel
+mod.gbm
+```
+
+####Predict the model
+
+Predicting with boosting in the validation set. 
+The accuracy of the model is: 0.967
+
+```{r, echo=TRUE}
+pred.gbm <- predict(mod.gbm,validationAcc)
+confusionMatrix(pred.gbm,validationAcc$classe)
+```
+
+###Bagging
+
+Bagging is run using default settings of parameters. 
+
+####Create the model
+
+```{r, echo=TRUE}
+set.seed(333)
+mod.treebag2 <- train(classe ~.,method = "treebag", data=trainingAcc)
+mod.treebag2$finalModel
+mod.treebag2
+```
+
+####Predict the model
+
+Predicting with bagging in the validation set. 
+The accuracy of the model is: 0.986
+
+```{r, echo=TRUE}
+require(RANN)
+pred.treebag2 <- predict(mod.treebag2,validationAcc)
+confusionMatrix(pred.treebag2,validationAcc$classe)
+```
+
+##Combining the Predictors
+
+Fit a model that combines predictors. 
+The accuracy of the model is: 0.477
+
+```{r, echo=TRUE}
+combinedAcc <- data.frame(pred.rpart,pred.rf3,pred.gbm,pred.treebag2,classe=validationAcc$classe)
+require(nlme)
+set.seed(333)
+mod.comb <- train(classe ~.,method="gam",data=combinedAcc)
+pred.comb <- predict(mod.comb,combinedAcc)
+confusionMatrix(pred.comb,validationAcc$classe)
+```
+
+##The expected out of sample error 
+
+Out of sample errors (Root Mean Squared Error) are calculated using the validation set. 
+
+```{r, echo=TRUE}
+#Error for predicting with trees
+sqrt(sum((as.numeric(pred.rpart) - as.numeric(validationAcc$classe))^2))
+#Error for random forest
+sqrt(sum((as.numeric(pred.rf3) - as.numeric(validationAcc$classe))^2))
+#Error for boosting
+sqrt(sum((as.numeric(pred.gbm) - as.numeric(validationAcc$classe))^2))
+#Error for bagging
+sqrt(sum((as.numeric(pred.treebag2) - as.numeric(validationAcc$classe))^2))
+#Error for combined predictors
+sqrt(sum((as.numeric(pred.comb) - as.numeric(validationAcc$classe))^2))
+```
+
+The selected model is the Random Forest because it has the highest accuracy.
+
+```{r, echo=TRUE}
+finModSelected <- mod.rf3$finalModel
+plot(finModSelected,"p",pch=19,cex=0.5,col="#00000010")
+```
+
+##Prediction in test set
+
+The Random Forest model is applied to predict the "classe" variable in the testing set:
+
+```{r, echo=TRUE}
+set.seed(333)
+pred.test <- predict(mod.rf3,testingAccFinal) 
+pred.test
+summary(pred.test)
+```
+
+##Reference
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. 
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+Read more: http://groupware.les.inf.puc-rio.br/har.#ixzz43OIKQ5Ua
