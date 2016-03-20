@@ -4,9 +4,7 @@ author: "Kenia Sousa"
 date: "9 Mar 2016"
 output: 
     html_document:
-        theme: null
-        highlight: null
-        mathjax: null
+      self_contained: no
 ---
 
 ```{r global_options, include=FALSE}
