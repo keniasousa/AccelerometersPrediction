@@ -2,7 +2,11 @@
 title: "Accelerometers Prediction"
 author: "Kenia Sousa"
 date: "9 Mar 2016"
-output: html_document
+output: 
+    html_document:
+        theme: null
+        highlight: null
+        mathjax: null
 ---
 
 ```{r global_options, include=FALSE}
