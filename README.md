@@ -10,7 +10,15 @@ The project includes the following files:
 
 4. The data containing training data set and testing data set: pml-training.csv and pml-testing.csv.
 
-In order to run the script in the R markdown file AccelerometersPrediction.Rmd,  save the files listed above in your working directory. The file of the data set is available in the links listed as follows:
+5. Figure folder containing the figures.
+
+6. Folder containing style files separately so the html is not self contained and it has a smaller size.
+
+In order to run the script in the R markdown file AccelerometersPrediction.Rmd, clone (download) this repository from GitHub in your working directory to be able to view the compiled html file of the analysis. 
+
+Here is the direct link to the repository: https://github.com/keniasousa/AccelerometersPrediction.git
+
+The file of the data set is also available in the links listed as follows:
 
 The training data: 
 https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
@@ -20,7 +28,7 @@ https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
 
 Open the R markdown file AccelerometersPrediction.Rmd in RStudio and click on "Knit HTML".
 
-The R markdown file AccelerometersPrediction.Rmd creates the AccelerometersPrediction.html page.
+Use knitr to convert the R markdown file AccelerometersPrediction.Rmd into the AccelerometersPrediction.html page.
 
 Reference:
 
